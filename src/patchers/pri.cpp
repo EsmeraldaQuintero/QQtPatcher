@@ -185,6 +185,7 @@ class PriPatcherWin32 : public PriPatcher
 public:
     Q_INVOKABLE PriPatcherWin32();
     ~PriPatcherWin32() override;
+    QString patchStaticQt5(const QDir &oldCompilerDir, const QDir &compilerDir, const QString &value) const;
 
     bool shouldPatch(const QString &file) const override;
     bool patchFile(const QString &file) const override;
@@ -194,8 +195,10 @@ public:
 
 PriPatcherWin32::PriPatcherWin32()
     : PriPatcher(QStringLiteral("win32-"),
-                 {QStringLiteral("mkspecs/modules/qt_lib_gui_private.pri"), QStringLiteral("mkspecs/modules/qt_lib_network_private.pri"),
-                  QStringLiteral("mkspecs/modules/qt_lib_multimedia_private.pri")})
+                 {QStringLiteral("mkspecs/modules/qt_lib_gui_private.pri"),
+                  QStringLiteral("mkspecs/modules/qt_lib_network_private.pri"),
+                  QStringLiteral("mkspecs/modules/qt_lib_multimedia_private.pri"),
+                  QStringLiteral("mkspecs/qmodule.pri")})
 {
 }
 
@@ -203,8 +206,40 @@ PriPatcherWin32::~PriPatcherWin32()
 {
 }
 
+QString PriPatcherWin32::patchStaticQt5(const QDir &oldCompilerDir, const QDir &compilerDir, const QString &value) const
+{
+    QString str = value;
+    QString nativeOld = QDir::toNativeSeparators(oldCompilerDir.absolutePath());
+    QString nonNativeOld = QDir::fromNativeSeparators(nativeOld);
+    QString nativeNew = QDir::toNativeSeparators(compilerDir.absolutePath());
+    QString nonNativeNew = QDir::fromNativeSeparators(nativeNew);
+    str.replace(nativeOld, nativeNew);
+    str.replace(nonNativeOld, nonNativeNew);
+    return str;
+}
+
 bool PriPatcherWin32::shouldPatch(const QString &file) const
 { // win32-msvc and win32-g++ use different grammar. MSVC does not use -l
+
+    if(!ArgumentsAndSettings::oldCompilerDir().isEmpty() && !ArgumentsAndSettings::compilerDir().isEmpty()) {
+        QDir oldCompilerDir(ArgumentsAndSettings::oldCompilerDir());
+        QString nativeOld = QDir::toNativeSeparators(oldCompilerDir.absolutePath());
+        QString nonNativeOld = QDir::fromNativeSeparators(nativeOld);
+
+        QFile f(QDir(ArgumentsAndSettings::qtDir()).absoluteFilePath(file));
+        if (f.exists() && f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            char arr[10000];
+            while (f.readLine(arr, 9999) > 0) {
+                QString str = QString::fromUtf8(arr);
+                str = str.trimmed();
+                if (str.contains(nativeOld) || str.contains(nonNativeOld)) {
+                    f.close();
+                    return true;
+                }
+            }
+            f.close();
+        }
+    }
     if (file.contains(QStringLiteral("qt_lib_network_private"))) {
         QFile f(QDir(ArgumentsAndSettings::qtDir()).absoluteFilePath(file));
         if (f.exists() && f.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -267,6 +302,48 @@ bool PriPatcherWin32::shouldPatch(const QString &file) const
 
 bool PriPatcherWin32::patchFile(const QString &file) const
 {
+    bool flag = false;
+    if(!ArgumentsAndSettings::oldCompilerDir().isEmpty() && !ArgumentsAndSettings::compilerDir().isEmpty()) {
+        if (file.contains(QStringLiteral("qmodule"))) {
+            flag = true;
+        }
+        QFile f(QDir(ArgumentsAndSettings::qtDir()).absoluteFilePath(file));
+        if (f.exists() && f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QByteArray toWrite;
+            char arr[10000];
+            while (f.readLine(arr, 9999) > 0) {
+                QString l = QString::fromUtf8(arr);
+                int equalMark = l.indexOf(QLatin1Char('='));
+                if (equalMark != -1) {
+                    QString key = l.left(equalMark).trimmed();
+                    QString value = l.mid(equalMark + 1).trimmed();
+                    if (key == QStringLiteral("QMAKE_LIBS_OPENGL")) {
+                        QDir oldCompilerDir(ArgumentsAndSettings::oldCompilerDir());
+                        QDir compilerDir(ArgumentsAndSettings::compilerDir());
+                        value = patchStaticQt5(oldCompilerDir, compilerDir, value);
+                        l = QStringLiteral("QMAKE_LIBS_OPENGL = ") + value + QStringLiteral("\n");
+                        strcpy(arr, l.toUtf8().constData());
+                    }
+                    else if (key == QStringLiteral("QMAKE_LIBS_ZLIB")) {
+                        QDir oldCompilerDir(ArgumentsAndSettings::oldCompilerDir());
+                        QDir compilerDir(ArgumentsAndSettings::compilerDir());
+                        value = patchStaticQt5(oldCompilerDir, compilerDir, value);
+                        l = QStringLiteral("QMAKE_LIBS_ZLIB = ") + value + QStringLiteral("\n");
+                        strcpy(arr, l.toUtf8().constData());
+                    }
+                }
+
+                toWrite.append(arr);
+            }
+            f.close();
+
+            f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text);
+            f.write(toWrite);
+            f.close();
+        } else
+        return false;
+    }
+
     if (file.contains(QStringLiteral("qt_lib_network_private"))) {
         QFile f(QDir(ArgumentsAndSettings::qtDir()).absoluteFilePath(file));
         if (f.exists() && f.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -394,7 +471,7 @@ bool PriPatcherWin32::patchFile(const QString &file) const
         } else
             return false;
     } else
-        return false;
+        return flag;
 
     return true;
 }
