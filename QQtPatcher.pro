@@ -15,13 +15,18 @@ TARGET = QQtPatcher
 VERSION = 0.7.3
 
 win32 {
-    RC_ICONS = res/QQtPatcher.ico
+    RC_FILE = res/QQtPatcher.rc
     QMAKE_TARGET_PRODUCT = "QQtPatcher"
     QMAKE_TARGET_DESCRIPTION = "Tool for patching paths in compiled Qt library"
     QMAKE_TARGET_COMPANY = "Mogara.org"
     QMAKE_TARGET_COPYRIGHT = "Frank Su, 2019-2020. http://mogara.org"
 }
 
+!contains(CONFIG, shared) {
+    win32-g++ {
+        QMAKE_LFLAGS += -static-libgcc -static-libstdc++ -Wl,-Bstatic,--whole-archive -lwinpthread -Wl,--no-whole-archive
+    }
+}
 
 DEFINES += QT_DEPRECATED_WARNINGS QT_DISABLE_DEPRECATED_BEFORE=0x060000 VERSION=\\\"$$VERSION\\\" QT_NO_CAST_FROM_ASCII
 
