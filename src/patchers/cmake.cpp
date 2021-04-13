@@ -13,7 +13,7 @@ public:
 
     QStringList findFileToPatch() const override;
     bool patchFile(const QString &file) const override;
-
+    QString patchStaticQt5(const QDir &oldCompilerDir, const QDir &compilerDir, const QString &value) const;
     bool shouldPatch(const QString &file) const;
 };
 
@@ -37,10 +37,8 @@ QStringList CMakePatcher::findFileToPatch() const
     // no absolute patchs should be found in these variables.
     static QString fileName = QStringLiteral("lib/cmake/Qt5Gui/Qt5GuiConfigExtras.cmake");
 
-    if (ArgumentsAndSettings::crossMkspec().startsWith(QStringLiteral("android"))) {
-        if (QDir(ArgumentsAndSettings::qtDir()).exists(fileName) && shouldPatch(fileName))
-            return {fileName};
-    }
+    if (QDir(ArgumentsAndSettings::qtDir()).exists(fileName) && shouldPatch(fileName))
+        return {fileName};
 
     return QStringList();
 
@@ -48,7 +46,7 @@ QStringList CMakePatcher::findFileToPatch() const
 }
 
 bool CMakePatcher::patchFile(const QString &file) const
-{
+{    
     if (file.contains(QStringLiteral("Qt5Gui"))) {
         QFile f(QDir(ArgumentsAndSettings::qtDir()).absoluteFilePath(file));
         if (f.exists() && f.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -58,13 +56,21 @@ bool CMakePatcher::patchFile(const QString &file) const
                 QString str = QString::fromUtf8(arr);
                 str = str.trimmed();
                 if (str.startsWith(QStringLiteral("_qt5gui_find_extra_libs("))) {
-                    str = str.mid(24);
-                    str.chop(1);
-                    QStringList l = str.split(QStringLiteral(" "));
-                    if (l.first() == QStringLiteral("EGL") && l.value(1) != QStringLiteral("\"EGL\""))
-                        strcpy(arr, "    _qt5gui_find_extra_libs(EGL \"EGL\" \"\" \"\")\n");
-                    else if (l.first() == QStringLiteral("OPENGL") && l.value(1) != QStringLiteral("\"GLESv2\""))
-                        strcpy(arr, "    _qt5gui_find_extra_libs(OPENGL \"GLESv2\" \"\" \"\")\n");
+                    if(!ArgumentsAndSettings::oldCompilerDir().isEmpty() && !ArgumentsAndSettings::compilerDir().isEmpty()){
+                        QDir oldCompilerDir(ArgumentsAndSettings::oldCompilerDir());
+                        QDir compilerDir(ArgumentsAndSettings::compilerDir());
+                        str = patchStaticQt5(oldCompilerDir, compilerDir, str);
+                    }
+                    if (ArgumentsAndSettings::crossMkspec().startsWith(QStringLiteral("android"))) {
+                        QString str2 = str.mid(24);
+                        str2.chop(1);
+                        QStringList l = str2.split(QStringLiteral(" "));
+                        if (l.first() == QStringLiteral("EGL") && l.value(1) != QStringLiteral("\"EGL\""))
+                            str = QStringLiteral("    _qt5gui_find_extra_libs(EGL \"EGL\" \"\" \"\")\n");
+                        else if (l.first() == QStringLiteral("OPENGL") && l.value(1) != QStringLiteral("\"GLESv2\""))
+                            str = QStringLiteral("    _qt5gui_find_extra_libs(OPENGL \"GLESv2\" \"\" \"\")\n");
+                    }
+                    strcpy(arr, str.toUtf8().constData());
                 }
                 toWrite.append(arr);
             }
@@ -81,8 +87,23 @@ bool CMakePatcher::patchFile(const QString &file) const
     return true;
 }
 
+QString CMakePatcher::patchStaticQt5(const QDir &oldCompilerDir, const QDir &compilerDir, const QString &value) const
+{
+    QString str = value;
+    QString nativeOld = QDir::toNativeSeparators(oldCompilerDir.absolutePath());
+    QString nonNativeOld = QDir::fromNativeSeparators(nativeOld);
+    QString nativeNew = QDir::toNativeSeparators(compilerDir.absolutePath());
+    QString nonNativeNew = QDir::fromNativeSeparators(nativeNew);
+    str.replace(nativeOld, nativeNew);
+    str.replace(nonNativeOld, nonNativeNew);
+    return str;
+}
+
 bool CMakePatcher::shouldPatch(const QString &file) const
 {
+    QDir oldCompilerDir(ArgumentsAndSettings::oldCompilerDir());
+    QDir compilerDir(ArgumentsAndSettings::compilerDir());
+
     if (file.contains(QStringLiteral("Qt5Gui"))) {
         QFile f(QDir(ArgumentsAndSettings::qtDir()).absoluteFilePath(file));
         if (f.exists() && f.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -101,6 +122,13 @@ bool CMakePatcher::shouldPatch(const QString &file) const
                     } else if (l.first() == QStringLiteral("OPENGL") && l.value(1) != QStringLiteral("\"GLESv2\"")) {
                         f.close();
                         return true;
+                    } else if(!ArgumentsAndSettings::oldCompilerDir().isEmpty() && !ArgumentsAndSettings::compilerDir().isEmpty()) {
+                        QString nativeOld = QDir::toNativeSeparators(oldCompilerDir.absolutePath());
+                        QString nonNativeOld = QDir::fromNativeSeparators(nativeOld);
+                        if (l.contains(nativeOld) || l.contains(nonNativeOld)) {
+                            f.close();
+                            return true;
+                        }
                     }
                 }
             }
