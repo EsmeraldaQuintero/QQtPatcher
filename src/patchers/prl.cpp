@@ -16,6 +16,8 @@ public:
 
     QString patchQmakePrlLibs(const QDir &oldLibDir, const QDir &newLibDir, const QString &value) const;
 
+    QString patchStaticQt5(const QDir &oldCompilerDir, const QDir &compilerDir, const QString &value) const;
+
     bool shouldPatch(const QString &file) const;
 
 private:
@@ -104,6 +106,18 @@ QString PrlPatcher::patchQmakePrlLibs(const QDir &oldLibDir, const QDir &newLibD
     return r.join(QStringLiteral(" "));
 }
 
+QString PrlPatcher::patchStaticQt5(const QDir &oldCompilerDir, const QDir &compilerDir, const QString &value) const
+{
+    QString str = value;
+    QString nativeOld = QDir::toNativeSeparators(oldCompilerDir.absolutePath());
+    QString nonNativeOld = QDir::fromNativeSeparators(nativeOld);
+    QString nativeNew = QDir::toNativeSeparators(compilerDir.absolutePath());
+    QString nonNativeNew = QDir::fromNativeSeparators(nativeNew);
+    str.replace(nativeOld, nativeNew);
+    str.replace(nonNativeOld, nonNativeNew);
+    return str;
+}
+
 bool PrlPatcher::patchFile(const QString &file) const
 {
     QDir qtDir(ArgumentsAndSettings::qtDir());
@@ -113,6 +127,8 @@ bool PrlPatcher::patchFile(const QString &file) const
     QDir newDir(ArgumentsAndSettings::newDir());
     QDir oldDir(ArgumentsAndSettings::oldDir());
     QDir buildDir(ArgumentsAndSettings::buildDir());
+    QDir oldCompilerDir(ArgumentsAndSettings::oldCompilerDir());
+    QDir compilerDir(ArgumentsAndSettings::compilerDir());
 
     // It is assumed that no spaces is in the olddir prefix
     QFile f(qtDir.absoluteFilePath(file));
@@ -127,6 +143,9 @@ bool PrlPatcher::patchFile(const QString &file) const
                 QString value = l.mid(equalMark + 1).trimmed();
                 if (key == QStringLiteral("QMAKE_PRL_LIBS")) {
                     value = patchQmakePrlLibs(oldLibDir, newLibDir, value);
+                    if(!ArgumentsAndSettings::oldCompilerDir().isEmpty() && !ArgumentsAndSettings::compilerDir().isEmpty()){
+                        value = patchStaticQt5(oldCompilerDir, compilerDir, value);
+                    }
                     l = QStringLiteral("QMAKE_PRL_LIBS = ") + value + QStringLiteral("\n");
                     strcpy(arr, l.toUtf8().constData());
                 } else if (key == QStringLiteral("QMAKE_PRL_BUILD_DIR")) {
@@ -174,6 +193,9 @@ bool PrlPatcher::shouldPatch(const QString &file) const
         buildLibDir = QDir(ArgumentsAndSettings::buildDir() + QStringLiteral("/lib"));
     }
 
+    QDir oldCompilerDir(ArgumentsAndSettings::oldCompilerDir());
+    QDir compilerDir(ArgumentsAndSettings::compilerDir());
+
     // it is assumed that no spaces is in the olddir prefix
 
     QFile f(libDir.absoluteFilePath(file));
@@ -187,11 +209,11 @@ bool PrlPatcher::shouldPatch(const QString &file) const
                 QString value = l.mid(equalMark + 1).trimmed();
                 if (key == QStringLiteral("QMAKE_PRL_LIBS")) {
 #if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
-                    QStringList l = value.split(QStringLiteral(" "), QString::SkipEmptyParts);
+                    QStringList list = value.split(QStringLiteral(" "), QString::SkipEmptyParts);
 #else
-                    QStringList l = value.split(QStringLiteral(" "), Qt::SkipEmptyParts);
+                    QStringList list = value.split(QStringLiteral(" "), Qt::SkipEmptyParts);
 #endif
-                    foreach (const QString &m, l) {
+                    foreach (const QString &m, list) {
                         QString n = m;
                         if (n.startsWith(QStringLiteral("-L="))) {
                             if (QDir(n.mid(3).replace(QStringLiteral("\\\\"), QStringLiteral("\\"))) == oldLibDir) {
@@ -207,6 +229,14 @@ bool PrlPatcher::shouldPatch(const QString &file) const
                             if (QDir(QFileInfo(QString(n).replace(QStringLiteral("\\\\"), QStringLiteral("\\"))).absolutePath()) == oldLibDir) {
                                 f.close();
                                 return true;
+                            }
+                            if(!ArgumentsAndSettings::oldCompilerDir().isEmpty() && !ArgumentsAndSettings::compilerDir().isEmpty()) {
+                                QString nativeOld = QDir::toNativeSeparators(oldCompilerDir.absolutePath());
+                                QString nonNativeOld = QDir::fromNativeSeparators(nativeOld);
+                                if (n.startsWith(nativeOld) || n.startsWith(nonNativeOld)) {
+                                    f.close();
+                                    return true;
+                                }
                             }
                         } else if (ArgumentsAndSettings::qtQVersion().majorVersion() == 4 && !ArgumentsAndSettings::buildDir().isEmpty()) {
                             if (n.startsWith(QStringLiteral("-L="))) {
