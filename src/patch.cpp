@@ -42,6 +42,14 @@ QString step1()
     }
     qtDir.makeAbsolute();
 
+    QDir compilerDir;
+    if (!ArgumentsAndSettings::compilerDir().isEmpty()) {
+        compilerDir = QDir(ArgumentsAndSettings::compilerDir());
+        if (!compilerDir.exists())
+            QBPLOGF(QString(QStringLiteral("Cannot find %1.")).arg(ArgumentsAndSettings::compilerDir()));
+    }
+    compilerDir.makeAbsolute();
+
     // find QMake in QtDir
     static const QStringList binQmakePaths {QStringLiteral("bin/qmake"), QStringLiteral("bin/qmake.exe")};
     static const QStringList qmakePaths {QStringLiteral("qmake"), QStringLiteral("qmake.exe")};
@@ -70,6 +78,7 @@ QString step1()
 
     ArgumentsAndSettings::setQtDir(qtDir.absolutePath());
     ArgumentsAndSettings::setNewDir(newDir.absolutePath());
+    ArgumentsAndSettings::setCompilerDir(compilerDir.absolutePath());
 
     QBPLOGV(QString(QStringLiteral("Step1: "
                                    "Found qmake Program: %1, "

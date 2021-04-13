@@ -19,6 +19,7 @@ struct AasStorage
     bool force;
     QString qtDir;
     QString newDir;
+    QString compilerDir;
     bool dryRun;
     QStringList unknownParameters;
 
@@ -86,6 +87,10 @@ bool ArgumentsAndSettings::parse()
                                                        "If not specified, current location will be used."),
                                         QStringLiteral("path")));
     parser.addOption(QCommandLineOption({QStringLiteral("d"), QStringLiteral("dry-run")}, QStringLiteral("Output the procedure only, do not really process the jobs.")));
+    parser.addOption(QCommandLineOption({QStringLiteral("c"), QStringLiteral("compiler-lib-dir")},
+                                        QStringLiteral("Directory, where compiler is now located (may be relative).\n"
+                                                       "If not specified, any patch to compiler dependencies will be applied. Only for Qt Kit version static."),
+                                        QStringLiteral("path")));
 
     parser.process(*qApp);
     if (parser.isSet(QStringLiteral("V")))
@@ -102,7 +107,8 @@ bool ArgumentsAndSettings::parse()
         s.newDir = parser.value(QStringLiteral("n"));
     if (parser.isSet(QStringLiteral("d")))
         s.dryRun = true;
-
+    if (parser.isSet(QStringLiteral("c")))
+        s.compilerDir = parser.value(QStringLiteral("c"));
     s.unknownParameters = parser.unknownOptionNames() + parser.positionalArguments();
 
     QFile configFile(QStringLiteral("qbp.json"));
@@ -157,6 +163,11 @@ QString ArgumentsAndSettings::newDir()
     return s.newDir;
 }
 
+QString ArgumentsAndSettings::compilerDir()
+{
+    return s.compilerDir;
+}
+
 bool ArgumentsAndSettings::dryRun()
 {
     return s.dryRun;
@@ -207,6 +218,12 @@ void ArgumentsAndSettings::setNewDir(const QString &dir)
 {
     QBPLOGV(QStringLiteral("newDir is set to ") + dir);
     s.newDir = dir;
+}
+
+void ArgumentsAndSettings::setCompilerDir(const QString &dir)
+{
+    QBPLOGV(QStringLiteral("compiler is set to ") + dir);
+    s.compilerDir = dir;
 }
 
 void ArgumentsAndSettings::setCrossMkspec(const QString &mkspec)

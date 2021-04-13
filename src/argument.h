@@ -15,6 +15,7 @@ QString logFile();
 bool force();
 QString qtDir();
 QString newDir();
+QString compilerDir();
 bool dryRun();
 QStringList unknownParameters();
 
@@ -31,6 +32,7 @@ QString oldDir();
 // helpers
 void setQtDir(const QString &dir);
 void setNewDir(const QString &dir);
+void setCompilerDir(const QString &dir);
 void setCrossMkspec(const QString &mkspec);
 void setHostMkspec(const QString &mkspec);
 void setQtVersion(const QString &version);
