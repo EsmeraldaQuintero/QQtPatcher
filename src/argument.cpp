@@ -20,6 +20,7 @@ struct AasStorage
     QString qtDir;
     QString newDir;
     QString compilerDir;
+    QString oldCompilerDir;
     bool dryRun;
     QStringList unknownParameters;
 
@@ -87,8 +88,12 @@ bool ArgumentsAndSettings::parse()
                                                        "If not specified, current location will be used."),
                                         QStringLiteral("path")));
     parser.addOption(QCommandLineOption({QStringLiteral("d"), QStringLiteral("dry-run")}, QStringLiteral("Output the procedure only, do not really process the jobs.")));
-    parser.addOption(QCommandLineOption({QStringLiteral("c"), QStringLiteral("compiler-lib-dir")},
+    parser.addOption(QCommandLineOption({QStringLiteral("c"), QStringLiteral("compiler-dir")},
                                         QStringLiteral("Directory, where compiler is now located (may be relative).\n"
+                                                       "If not specified, any patch to compiler dependencies will be applied. Only for Qt Kit version static."),
+                                        QStringLiteral("path")));
+    parser.addOption(QCommandLineOption({QStringLiteral("o"), QStringLiteral("old-compiler-dir")},
+                                        QStringLiteral("Directory, where compiler was located (absolute path).\n"
                                                        "If not specified, any patch to compiler dependencies will be applied. Only for Qt Kit version static."),
                                         QStringLiteral("path")));
 
@@ -109,6 +114,8 @@ bool ArgumentsAndSettings::parse()
         s.dryRun = true;
     if (parser.isSet(QStringLiteral("c")))
         s.compilerDir = parser.value(QStringLiteral("c"));
+    if (parser.isSet(QStringLiteral("o")))
+        s.oldCompilerDir = parser.value(QStringLiteral("o"));
     s.unknownParameters = parser.unknownOptionNames() + parser.positionalArguments();
 
     QFile configFile(QStringLiteral("qbp.json"));
@@ -168,6 +175,11 @@ QString ArgumentsAndSettings::compilerDir()
     return s.compilerDir;
 }
 
+QString ArgumentsAndSettings::oldCompilerDir()
+{
+    return s.oldCompilerDir;
+}
+
 bool ArgumentsAndSettings::dryRun()
 {
     return s.dryRun;
@@ -224,6 +236,12 @@ void ArgumentsAndSettings::setCompilerDir(const QString &dir)
 {
     QBPLOGV(QStringLiteral("compiler is set to ") + dir);
     s.compilerDir = dir;
+}
+
+void ArgumentsAndSettings::setOldCompilerDir(const QString &dir)
+{
+    QBPLOGV(QStringLiteral("old compiler is set to ") + dir);
+    s.oldCompilerDir = dir;
 }
 
 void ArgumentsAndSettings::setCrossMkspec(const QString &mkspec)

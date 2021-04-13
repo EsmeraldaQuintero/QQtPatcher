@@ -47,6 +47,8 @@ QString step1()
         compilerDir = QDir(ArgumentsAndSettings::compilerDir());
         if (!compilerDir.exists())
             QBPLOGF(QString(QStringLiteral("Cannot find %1.")).arg(ArgumentsAndSettings::compilerDir()));
+        if (ArgumentsAndSettings::oldCompilerDir().isEmpty())
+            QBPLOGF(QString(QStringLiteral("Old compiler path not given.")));
     }
     compilerDir.makeAbsolute();
 

@@ -16,6 +16,7 @@ bool force();
 QString qtDir();
 QString newDir();
 QString compilerDir();
+QString oldCompilerDir();
 bool dryRun();
 QStringList unknownParameters();
 
@@ -33,6 +34,7 @@ QString oldDir();
 void setQtDir(const QString &dir);
 void setNewDir(const QString &dir);
 void setCompilerDir(const QString &dir);
+void setOldCompilerDir(const QString &dir);
 void setCrossMkspec(const QString &mkspec);
 void setHostMkspec(const QString &mkspec);
 void setQtVersion(const QString &version);
