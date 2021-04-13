@@ -15,7 +15,8 @@ public:
 
     bool shouldPatch(const QString &file) const;
 
-    void patchQt5(const QString &str, char *arr, const QDir &newDir) const;
+    QString patchQt5(const QDir &newDir, const QString &value) const;
+    QString patchStaticQt5(const QDir &oldCompilerDir, const QDir &compilerDir, const QString &value) const;
     void patchQt4MinGW(const QString &str, char *arr, const QDir &newDir, const QString &fBaseName) const;
     void patchQt4Unix(const QString &str, char *arr, const QDir &newDir, const QString &fBaseName) const;
 };
@@ -64,6 +65,8 @@ bool PcPatcher::patchFile(const QString &file) const
 {
     QDir qtDir(ArgumentsAndSettings::qtDir());
     QDir newDir(ArgumentsAndSettings::newDir());
+    QDir oldCompilerDir(ArgumentsAndSettings::oldCompilerDir());
+    QDir compilerDir(ArgumentsAndSettings::compilerDir());
 
     QFile f(qtDir.absoluteFilePath(file));
     if (f.exists() && f.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -73,7 +76,11 @@ bool PcPatcher::patchFile(const QString &file) const
             QString str = QString::fromUtf8(arr);
             str = str.trimmed();
             if (ArgumentsAndSettings::qtQVersion().majorVersion() == 5) {
-                patchQt5(str, arr, newDir);
+                QString value = patchQt5(newDir, str);
+                if(!ArgumentsAndSettings::oldCompilerDir().isEmpty() && !ArgumentsAndSettings::compilerDir().isEmpty()){
+                    value = patchStaticQt5(oldCompilerDir, compilerDir, value);
+                }
+                strcpy(arr, value.toUtf8().constData());
             } else if (ArgumentsAndSettings::qtQVersion().majorVersion() == 4) {
                 // Why MinGW versions and Linux versions are different........
                 if (ArgumentsAndSettings::crossMkspec().startsWith(QStringLiteral("win32-")))
@@ -104,6 +111,9 @@ bool PcPatcher::shouldPatch(const QString &file) const
 
     QDir oldDir(ArgumentsAndSettings::oldDir());
 
+    QDir oldCompilerDir(ArgumentsAndSettings::oldCompilerDir());
+    QDir compilerDir(ArgumentsAndSettings::compilerDir());
+
     QFile f(pcDir.absoluteFilePath(file));
     if (f.exists() && f.open(QIODevice::ReadOnly | QIODevice::Text)) {
         char arr[10000];
@@ -117,6 +127,16 @@ bool PcPatcher::shouldPatch(const QString &file) const
                     return true;
                 }
             }
+            if (str.startsWith(QStringLiteral("Libs.private:"))) {
+                if(!ArgumentsAndSettings::oldCompilerDir().isEmpty() && !ArgumentsAndSettings::compilerDir().isEmpty()) {
+                    QString nativeOld = QDir::toNativeSeparators(oldCompilerDir.absolutePath());
+                    QString nonNativeOld = QDir::fromNativeSeparators(nativeOld);
+                    if (str.contains(nativeOld) || str.contains(nonNativeOld)) {
+                        f.close();
+                        return true;
+                    }
+                }
+            }
         }
         f.close();
     }
@@ -124,16 +144,30 @@ bool PcPatcher::shouldPatch(const QString &file) const
     return false;
 }
 
-void PcPatcher::patchQt5(const QString &_str, char *arr, const QDir &newDir) const
+QString PcPatcher::patchQt5(const QDir &newDir, const QString &value) const
 {
-    QString str = _str;
+    QString str = value;
     if (str.startsWith(QStringLiteral("prefix="))) {
         str = QStringLiteral("prefix=") + QDir::toNativeSeparators(newDir.absolutePath()).replace(QStringLiteral("\\"), QStringLiteral("\\\\")) + QStringLiteral("\n");
-        strcpy(arr, str.toUtf8().constData());
     } else if (str.startsWith(QStringLiteral("libdir=")))
-        strcpy(arr, "libdir=${prefix}/lib\n");
+        str = QStringLiteral("libdir=${prefix}/lib\n");
     else if (str.startsWith(QStringLiteral("includedir=")))
-        strcpy(arr, "includedir=${prefix}/include\n");
+        str = QStringLiteral("includedir=${prefix}/include\n");
+    else
+        str += QStringLiteral("\n");
+    return str;
+}
+
+QString PcPatcher::patchStaticQt5(const QDir &oldCompilerDir, const QDir &compilerDir, const QString &value) const
+{
+    QString str = value;
+    QString nativeOld = QDir::toNativeSeparators(oldCompilerDir.absolutePath());
+    QString nonNativeOld = QDir::fromNativeSeparators(nativeOld);
+    QString nativeNew = QDir::toNativeSeparators(compilerDir.absolutePath());
+    QString nonNativeNew = QDir::fromNativeSeparators(nativeNew);
+    str.replace(nativeOld, nativeNew);
+    str.replace(nonNativeOld, nonNativeNew);
+    return str;
 }
 
 void PcPatcher::patchQt4MinGW(const QString &_str, char *arr, const QDir &newDir, const QString &fBaseName) const
